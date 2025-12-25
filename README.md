@@ -145,7 +145,7 @@ Phase 6: Advanced Topics 📋 (Future)
 
 ### Portfolio
 
-- **LinkedIn:** [https://www.linkedin.com/in/mahmood-rajput/](#)
+- **LinkedIn:** [https://www.linkedin.com/in/mahmood-rajput/]
 - **GitHub:** [@mmrajput](https://github.com/mmrajput)
 - **Email:** mahmoodrajput.cloud@gmail.com
 
