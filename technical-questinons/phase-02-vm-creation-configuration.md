@@ -66,8 +66,31 @@ Production Pattern (3-node cluster, 100 worker nodes):
 - In small clusters (like yours), control plane often needs equal or more RAM than workers.
 - In large clusters, workers scale horizontally (more nodes), while control plane scales vertically (bigger nodes).
 
-## 3: What happens if your control plane IP changes after cluster initialization? (CKA exam question incoming!)
+## 3: What happens if your control plane IP changes after cluster initialization?
 
 ```
+When Control Plane IP Changes After kubeadm init:
 
+IMMEDIATE FAILURES:
+├─ ❌ kubectl commands fail (can't reach API server)
+├─ ❌ kubelet on workers can't join cluster (wrong IP in bootstrap config)
+├─ ❌ Pods can't call Kubernetes API (service endpoints stale)
+└─ ❌ etcd cluster breaks if multi-master (peer URLs hardcoded)
+
+WHY IT BREAKS:
+1. kubeadm init writes control plane IP to:
+   ├─ /etc/kubernetes/admin.conf (kubectl config)
+   ├─ /etc/kubernetes/kubelet.conf (node → API communication)
+   ├─ /etc/kubernetes/manifests/kube-apiserver.yaml (--advertise-address)
+   └─ PKI certificates (API server cert has IP in SAN field)
+
+2. Worker nodes have hardcoded control plane IP in:
+   ├─ /etc/kubernetes/bootstrap-kubeconfig.conf
+   └─ /etc/kubernetes/kubelet.conf
+
+3. Kubernetes Service (ClusterIP for API):
+   ├─ Points to control plane endpoint
+   └─ If IP changes, Service can't route traffic
+
+RESULT: Total cluster failure. Not just SSH issues—ZERO pod communication.
 ```
