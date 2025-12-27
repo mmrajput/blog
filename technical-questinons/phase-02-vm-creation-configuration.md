@@ -94,3 +94,18 @@ WHY IT BREAKS:
 
 RESULT: Total cluster failure. Not just SSH issues—ZERO pod communication.
 ```
+How to Fix (Production Disaster Recovery Scenario):
+
+```
+Option 1: Use DNS name instead of IP (BEST PRACTICE)
+kubeadm init --control-plane-endpoint "k8s-cp.example.com:6443"
+# Now change DNS A record, restart components, cluster survives
+
+# Option 2: Regenerate certificates + reconfigure (PAINFUL)
+kubeadm init phase certs apiserver --apiserver-advertise-address NEW_IP
+kubeadm init phase kubeconfig all
+systemctl restart kubelet
+# Then update all worker nodes manually.
+
+# Option 3: Rebuild cluster from backup (NUCLEAR OPTION)
+```
