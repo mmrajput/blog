@@ -2,10 +2,8 @@
 
 **Author:** Mahmood  
 **Date:** December 25, 2024  
-**Hardware:** Beelink SER5 Pro (Ryzen 7 5800H, 32GB RAM, 500GB NVMe)  
-**Software:** Proxmox VE 8.x  
-**Purpose:** Kubernetes Homelab for CKA Exam Preparation
-
+**Hardware:** Beelink SER5 Pro (AMD Ryzen 5 5500U, 32GB RAM, 500GB NVMe)  
+**Software:** Proxmox VE 8.x
 ---
 
 ## Table of Contents
@@ -46,29 +44,24 @@ This guide documents the complete process of installing Proxmox VE on a Beelink 
 ### Beelink SER5 Pro Specifications
 
 ```
-CPU:     AMD Ryzen 7 5800H (8 cores, 16 threads, up to 4.4GHz)
-RAM:     32GB DDR4
-Storage: 500GB NVMe SSD
-Network: 1x Gigabit Ethernet (Realtek), 1x WiFi 6 (MediaTek MT7921)
-GPU:     AMD Radeon Graphics (integrated)
-Ports:   Multiple USB 3.2, HDMI, USB-C
-Size:    Compact mini PC form factor
+CPU:     AMD Ryzen 5 5500U (6 cores / 12 threads, up to 4.0GHz)
+RAM:     32GB DDR4 (Usable 27GiB)
+Storage: 500GB NVMe SSD (476GB usable)
+Network: 1x Gigabit Ethernet (Realtek)
 ```
 
 ### Resource Allocation Plan
 
 ```
-Proxmox Host:     ~8GB RAM reserved
-Kubernetes VMs:   ~24GB RAM available
-  - Control Plane: 4GB RAM, 2 vCPU, 40GB disk
-  - Worker 1:      6GB RAM, 4 vCPU, 60GB disk
-  - Worker 2:      6GB RAM, 4 vCPU, 60GB disk
-  - Worker 3:      6GB RAM, 4 vCPU, 60GB disk (optional)
+Proxmox Host:     ~7GB RAM reserved
+Kubernetes VMs:   ~20GB RAM allocated
+  - Control Plane: 6GB RAM, 3 vCPU, 50GB disk
+  - Worker 1:      7GB RAM, 3 vCPU, 100GB disk
+  - Worker 2:      7GB RAM, 3 vCPU, 100GB disk
 ```
 
 **Power Consumption:** ~25-35W average (€6-10/month at German electricity rates)
 
----
 
 ## Prerequisites
 
@@ -293,23 +286,75 @@ cat /etc/network/interfaces
 **Example configuration:**
 
 ```bash
+# Bring up the loopback interface automatically at boot
 auto lo
+
+# Configure the loopback interface using IPv4
 iface lo inet loopback
+# 'lo' is the local loopback interface (127.0.0.1),
+# used for internal communication within the system
 
-# Physical interface
+
+# -------------------------------
+# Physical Network Interface
+# -------------------------------
+
+# Define the physical NIC without assigning it an IP address
 iface nic0 inet manual
+# 'manual' means:
+# - No IP configuration is applied directly
+# - The interface is controlled by another device (bridge)
+# In Proxmox, the physical NIC is typically attached to a bridge
 
-# Bridge for VMs
+
+# -------------------------------
+# Bridge Interface for VMs
+# -------------------------------
+
+# Bring up the bridge automatically at boot
 auto vmbr0
-iface vmbr0 inet static
-    address 192.168.178.33/24
-    gateway 192.168.178.1
-    bridge-ports nic0
-    bridge-stp off
-    bridge-fd 0
-    dns-nameservers 192.168.178.1 8.8.8.8
 
+# Configure the bridge with a static IPv4 address
+iface vmbr0 inet static
+
+    # Static IP address assigned to the Proxmox host
+    address 192.168.178.33/24
+    # /24 means subnet mask 255.255.255.0
+
+    # Default gateway for outbound traffic
+    gateway 192.168.178.1
+    # All traffic outside the local network is routed through this IP
+
+    # Attach the physical NIC to the bridge
+    bridge-ports nic0
+    # This makes vmbr0 act like a virtual switch,
+    # allowing VMs and containers to share the physical NIC
+
+    # Disable Spanning Tree Protocol (STP)
+    bridge-stp off
+    # STP is unnecessary in most single-host homelab setups
+    # and disabling it avoids startup delays
+
+    # Set bridge forwarding delay to 0 seconds
+    bridge-fd 0
+    # Prevents delay when the bridge comes up,
+    # useful for faster VM networking availability
+
+    # DNS servers used by the Proxmox host
+    dns-nameservers 192.168.178.1 8.8.8.8
+    # First: local router DNS
+    # Second: Google public DNS as fallback
+
+
+# -------------------------------
+# Include Additional Interface Configs
+# -------------------------------
+
+# Load additional network interface configurations
 source /etc/network/interfaces.d/*
+# Allows modular network configuration
+# Proxmox and other tools may drop extra configs here
+
 ```
 
 ### Verify Network Status
@@ -368,30 +413,7 @@ The Beelink SER5 Pro uses a **MediaTek MT7921 WiFi card**, which has firmware lo
 - Downloading firmware from linux-firmware repository
 - Kernel updates may resolve in future Proxmox releases
 
-**Recommendation:** Don't waste time troubleshooting WiFi for Proxmox hosts.
-
-### Proper Network Setup Options
-
-**✅ Recommended Solutions:**
-
-1. **Keep Proxmox on Ethernet** (Best)
-   - Most reliable and performant
-   - Production-grade setup
-   - Manage remotely via SSH/Web UI from WiFi devices
-
-2. **Use Powerline Adapters** (If you must move the device)
-   - Ethernet-over-power-lines (~€40-60)
-   - ~200-500 Mbps throughput
-   - More reliable than WiFi
-   - Example: TP-Link TL-PA7017P, Devolo Magic 2
-
-3. **Run Long Ethernet Cable** (Cheapest)
-   - 15-20m flat Cat6 cable (~€15-20)
-   - Run under doors, along baseboards
-   - Nearly invisible when properly routed
-   - Full gigabit performance
-
-**Note:** Your laptop, tablet, and other devices can use WiFi to access Proxmox. Only the Proxmox host itself needs ethernet!
+**Recommendation:** Don't waste time troubleshooting WiFi for Proxmox hosts. Keep Proxmox on Ethernet
 
 ---
 
@@ -444,21 +466,6 @@ Connection Details:
   Username: root
   Password: [your password]
 ```
-
-### Windows Terminal Setup (Optional Enhancement)
-
-For a better SSH experience on Windows:
-
-1. Install **Windows Terminal** from Microsoft Store
-2. Add Proxmox profile:
-   ```json
-   {
-     "name": "Proxmox Homelab",
-     "commandline": "ssh root@192.168.178.33",
-     "icon": "🖥️"
-   }
-   ```
-
 ---
 
 ## Next Steps
@@ -622,7 +629,6 @@ You now have a fully functional Proxmox VE server running on your Beelink SER5 P
 - ✅ Running multiple virtual machines efficiently
 - ✅ Building a multi-node Kubernetes cluster
 - ✅ Practicing for CKA certification
-- ✅ Creating interview demonstration projects
 - ✅ Learning enterprise infrastructure tools
 
 ### Key Takeaways
